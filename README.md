@@ -4,14 +4,14 @@
 
 ---
 
-## 🌌 Project Overview
+##  Project Overview
 **VectorSpace** is a high-fidelity, interactive vector workspace and developer layout framework built using React and Vite. Engineered to bridge the gap between abstract coordinate tracking systems and interactive frontend layouts, it provides engineers with an ultra-lightweight, customizable graphical engine to manage primitives, canvas states, and digital design tokens natively in the browser. 
 
 Designed for both solo developers and large-scale engineering teams, VectorSpace acts as a single source of truth for your application's visual architecture—seamlessly blending state-driven design logic with highly optimized rendering workflows.
 
 ---
 
-## 🛠️ Tech Stack & Languages
+##  Tech Stack & Languages
 
 * **Core Languages:** JavaScript (ES6+), HTML5, CSS3
 * **Framework:** React 18
@@ -22,7 +22,7 @@ Designed for both solo developers and large-scale engineering teams, VectorSpace
 
 ---
 
-## ⚡ Core Engine Architecture & Engineering Optimizations
+##  Core Engine Architecture & Engineering Optimizations
 
 * **Magic Vector Tracing Algorithm:** A bespoke client-side processing utility that dynamically traces and extrapolates raster images (PNG/JPG) into infinitely scalable vector graphics (SVG). This operation occurs entirely inside the browser without requiring external server compute, preserving strict data privacy and bypassing latency bottlenecks.
 * **Persistent Google Cloud Synchronization:** Deeply integrated with Firebase Authentication and Firestore real-time databases. The application intelligently merges local browser storage states with cloud-hosted workspaces, ensuring zero data loss during offline sessions while providing a seamless roaming experience across devices.
@@ -32,7 +32,7 @@ Designed for both solo developers and large-scale engineering teams, VectorSpace
 
 ---
 
-## 🎨 Design Language Tokens
+##  Design Language Tokens
 
 The workspace features a minimalist, dark-charcoal and clean-off-white industrial aesthetic centered around an aligned layout grid framework. This exact design system is entirely self-hosted within the app's own token registry.
 
@@ -42,7 +42,7 @@ The workspace features a minimalist, dark-charcoal and clean-off-white industria
 
 ---
 
-## ⚙️ Local Development Setup Instructions
+##  Local Development Setup Instructions
 
 Follow these standard terminal scripts to install and boot the project locally:
 
@@ -65,7 +65,7 @@ Follow these standard terminal scripts to install and boot the project locally:
 
 ---
 
-## 📄 Licensing
+##  Licensing
 
 Distributed under the protective, open-source **Apache License 2.0**. Full conditions can be reviewed inside the accompanying `LICENSE` text file.
 
