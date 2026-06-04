@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  --grid-color: rgba(0, 95, 115, 0.07);
+  /* Deep teal tint */
+  --bg-color: #f8fafc;
+  /* Slate-50 */
+  --text-base: #1e293b;
+  /* Slate-800 */
+}
+
+.dark {
+  --grid-color: rgba(255, 255, 255, 0.04);
+  --bg-color: #0f172a;
+  /* Slate-900 */
+  --text-base: #f8fafc;
+  /* Slate-50 */
+}
+
+@utility pattern-grid {
+  background-size: 24px 24px;
+  background-image:
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+}
+
+html,
+body {
+  background-color: var(--bg-color);
+  color: var(--text-base);
+  margin: 0;
+  padding: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  font-family: var(--font-sans);
+}
+
+/* Custom Scrollbar for a softer look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 10px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.8);
+}
+
+@keyframes slide-up {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slide-in {
+  0% { transform: translateX(20px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.4s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.bg-gradient-flow {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+/* Batch 1: Transitions & Animations */
+.theme-transition * {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 300ms;
+}
+
+@keyframes spin-in {
+  from { transform: rotate(-90deg) scale(0.5); opacity: 0; }
+  to { transform: rotate(0) scale(1); opacity: 1; }
+}
+.animate-spin-in {
+  animation: spin-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* ─── Staggered card entrance ─── */
+@keyframes card-enter {
+  0%   { opacity: 0; transform: translateY(18px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.animate-card-enter {
+  animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─── Inspector large preview glow pulse ─── */
+@keyframes preview-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--preview-glow, rgba(0,95,115,0)); }
+  50%       { box-shadow: 0 0 32px 8px var(--preview-glow, rgba(0,95,115,0.15)); }
+}
+.animate-preview-glow {
+  animation: preview-glow 3s ease-in-out infinite;
+}
+
+/* ─── Glassmorphism sidebar depth ─── */
+.glass-sidebar {
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-right: 1px solid rgba(255,255,255,0.55);
+  box-shadow: inset -1px 0 0 rgba(0,0,0,0.04), 4px 0 24px rgba(0,0,0,0.04);
+}
+.dark .glass-sidebar {
+  background: rgba(15,23,42,0.75);
+  border-right: 1px solid rgba(255,255,255,0.07);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.04), 4px 0 24px rgba(0,0,0,0.25);
+}
+
+/* ─── No scrollbar utility ─── */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ─── Hover card shine ─── */
+@keyframes card-shine {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.card-shine-hover:hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255,255,255,0.12) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: card-shine 0.6s ease forwards;
+  pointer-events: none;
+  z-index: 1;
+}

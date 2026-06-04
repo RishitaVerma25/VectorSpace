@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="vectorSpaceGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#005F73" />
+      <stop offset="100%" stop-color="#94D2BD" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M 43 52 L 36 40 L 20 40 L 42 76 L 78 16"
+    stroke="url(#vectorSpaceGradient)"
+    stroke-width="11"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
