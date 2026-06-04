@@ -1,7 +1,7 @@
 # VectorSpace
 
 [![Live Demo](https://img.shields.io/badge/Live-Demo-005F73?style=for-the-badge&logo=vercel)](https://vector-space-two.vercel.app)
-[![Vercel Build Status](https://deploy-badge.vercel.app/api/RishitaVerma25/vector-space/badge.svg?style=for-the-badge)](https://vercel.com/rishitaverma25s-projects/vector-space)
+[![Vercel Build Status](https://deploy-badge.vercel.app/api/rishitaverma25/vector-space)](https://vercel.com/rishitaverma25s-projects/vector-space)
 
 ---
 
