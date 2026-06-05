@@ -81,13 +81,13 @@ export default function HelpGuide({ isOpen, onClose }) {
   return (
     <div className="fixed inset-0 z-[100] flex justify-start">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
-      
+
       {/* Drawer */}
-      <div 
+      <div
         className="relative w-full max-w-4xl bg-[#FFFFFF] h-full shadow-2xl flex flex-col animate-[slideInLeft_0.3s_ease-out] z-10"
         style={{ animationName: 'slideInLeft' }}
       >
@@ -108,7 +108,7 @@ export default function HelpGuide({ isOpen, onClose }) {
             scrollbar-width: none;
           }
         `}</style>
-        
+
         {/* Header */}
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -121,7 +121,7 @@ export default function HelpGuide({ isOpen, onClose }) {
             </div>
             <h2 className="text-xl md:text-2xl font-black text-[#1A252C]">VectorSpace Help Guide</h2>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 rounded-full hover:bg-gray-100 text-[var(--accent)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             aria-label="Close Help Guide"
@@ -143,11 +143,10 @@ export default function HelpGuide({ isOpen, onClose }) {
                 <button
                   key={cat.id}
                   onClick={() => setActiveTab(cat.id)}
-                  className={`flex-shrink-0 whitespace-nowrap md:w-full text-left px-3 py-2 md:px-4 md:py-3.5 rounded-xl font-semibold transition-all duration-200 flex items-center gap-2.5 ${
-                    activeTab === cat.id 
-                      ? 'bg-[#94D2BD] text-[var(--accent)] shadow-sm transform scale-[1.02]' 
+                  className={`flex-shrink-0 whitespace-nowrap md:w-full text-left px-3 py-2 md:px-4 md:py-3.5 rounded-xl font-semibold transition-all duration-200 flex items-center gap-2.5 ${activeTab === cat.id
+                      ? 'bg-[#94D2BD] text-[var(--accent)] shadow-sm transform scale-[1.02]'
                       : 'text-[#4A5560] hover:bg-gray-100 hover:text-[#1A252C]'
-                  }`}
+                    }`}
                 >
                   <span className={activeTab === cat.id ? 'text-[var(--accent)]' : 'text-[#4A5560]'}>
                     {cat.icon}
@@ -160,7 +159,7 @@ export default function HelpGuide({ isOpen, onClose }) {
 
           {/* Right Content */}
           <div className="flex-1 p-4 md:p-8 lg:p-10 overflow-y-auto bg-[#FFFFFF]">
-            
+
             {activeTab === 'getting-started' && (
               <div className="space-y-6 md:space-y-8 animate-[fadeInHelp_0.3s_ease-out]" style={{ animationName: 'fadeInHelp' }}>
                 <h3 className="text-xl md:text-2xl font-extrabold text-[#1A252C] flex items-center gap-3">
@@ -170,7 +169,7 @@ export default function HelpGuide({ isOpen, onClose }) {
                       <line x1="9" y1="3" x2="9" y2="18"></line>
                       <line x1="15" y1="6" x2="15" y2="21"></line>
                     </svg>
-                  </span> 
+                  </span>
                   Getting Started
                 </h3>
                 <ul className="space-y-4 md:space-y-6 list-none text-[#4A5560] leading-relaxed text-sm md:text-base">
@@ -195,7 +194,7 @@ export default function HelpGuide({ isOpen, onClose }) {
                       <polyline points="17 8 12 3 7 8"></polyline>
                       <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                  </span> 
+                  </span>
                   File Ingestion
                 </h3>
                 <ul className="space-y-4 md:space-y-6 list-none text-[#4A5560] leading-relaxed text-sm md:text-base">
@@ -225,13 +224,13 @@ export default function HelpGuide({ isOpen, onClose }) {
                       <rect x="14" y="12" width="7" height="9" rx="1"></rect>
                       <rect x="3" y="16" width="7" height="5" rx="1"></rect>
                     </svg>
-                  </span> 
+                  </span>
                   Interface Hierarchy
                 </h3>
                 <ul className="space-y-4 md:space-y-6 list-none text-[#4A5560] leading-relaxed text-sm md:text-base">
                   <li className="flex gap-3 md:gap-4 items-start">
                     <span className="text-[var(--accent)] mt-1.5 text-lg leading-none flex-shrink-0">•</span>
-                    <span><strong>Left Sidebar Controller:</strong> Houses project workspaces, custom token category filters, primary buttons, and the system log-out mechanism. The sidebar can be expanded or collapsed to maximize screen real estate.</span>
+                    <span><strong>Left Sidebar Controller:</strong> Houses project workspaces, infinite nested folders, custom token category filters, primary buttons, and the system log-out mechanism. The sidebar can be expanded or collapsed to maximize screen real estate.</span>
                   </li>
                   <li className="flex gap-3 md:gap-4 items-start">
                     <span className="text-[var(--accent)] mt-1.5 text-lg leading-none flex-shrink-0">•</span>
@@ -264,10 +263,10 @@ export default function HelpGuide({ isOpen, onClose }) {
                       <line x1="9" y1="8" x2="15" y2="8"></line>
                       <line x1="17" y1="16" x2="23" y2="16"></line>
                     </svg>
-                  </span> 
+                  </span>
                   Capabilities
                 </h3>
-                
+
                 <div className="space-y-6">
                   <div>
                     <h4 className="font-bold text-[#1A252C] text-base mb-2">1. Workspace Isolation</h4>
@@ -312,7 +311,7 @@ export default function HelpGuide({ isOpen, onClose }) {
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-[#1A252C] text-base mb-2">7. Magic Vector Trace</h4>
+                    <h4 className="font-bold text-[#1A252C] text-base mb-2">7. Image-to-SVG Converter</h4>
                     <p className="text-[#4A5560] text-sm leading-relaxed">
                       Process local raster formats (PNG, JPEG) using client-side image parsing libraries to trace outline coordinates and return copyable, lightweight, fully scalable SVG vector paths.
                     </p>
@@ -326,14 +325,21 @@ export default function HelpGuide({ isOpen, onClose }) {
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-[#1A252C] text-base mb-2">9. Preview Sandbox Canvas</h4>
+                    <h4 className="font-bold text-[#1A252C] text-base mb-2">9. Preview Sandbox & Code Formatting</h4>
                     <p className="text-[#4A5560] text-sm leading-relaxed">
-                      Inspect and compare visual modifications using split-slider tools. Perform vertical splits to compare Saturation and Grayscale properties over prototype assets.
+                      Inspect and compare visual modifications, format code snippets automatically, and clean/optimize SVG paths directly from the Value Payload panel.
                     </p>
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-[#1A252C] text-base mb-2">10. Digital Token Export Engine</h4>
+                    <h4 className="font-bold text-[#1A252C] text-base mb-2">10. AI Asset Generator Simulation</h4>
+                    <p className="text-[#4A5560] text-sm leading-relaxed">
+                      Instantly synthesize HTML code snippets, SVG icons, and color palettes from raw text prompts. Features a side-by-side live visual preview alongside the raw code payload, with one-click saving to your active workspace folder.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-[#1A252C] text-base mb-2">11. Digital Token Export Engine</h4>
                     <p className="text-[#4A5560] text-sm leading-relaxed">
                       Extract project details seamlessly. Export workspaces as standard W3C Design Tokens JSON, auto-generate ready-to-paste CSS Variable style documents, or download ZIP archives packed with vector configurations.
                     </p>
@@ -350,7 +356,7 @@ export default function HelpGuide({ isOpen, onClose }) {
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                     </svg>
-                  </span> 
+                  </span>
                   Account & Security
                 </h3>
                 <ul className="space-y-4 md:space-y-6 list-none text-[#4A5560] leading-relaxed text-sm md:text-base">
@@ -365,7 +371,7 @@ export default function HelpGuide({ isOpen, onClose }) {
                 </ul>
               </div>
             )}
-            
+
           </div>
         </div>
       </div>

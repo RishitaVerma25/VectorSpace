@@ -150,7 +150,7 @@ export default function ImageTracerModal({ isOpen, onClose, onTraceComplete }) {
           <div>
             <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 flex items-center space-x-2">
               <svg className="text-[var(--accent)]" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-              <span>Magic Vector Trace</span>
+              <span>Image-to-SVG Converter</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Convert any PNG/JPG into infinitely scalable SVG paths.</p>
           </div>
@@ -210,6 +210,11 @@ export default function ImageTracerModal({ isOpen, onClose, onTraceComplete }) {
                       {opt.label}
                     </button>
                   ))}
+                </div>
+                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                    <span className="font-bold">💡 Tip:</span> Looking for UI icons like checkmarks or user profiles? Try our <strong className="font-bold text-amber-800 dark:text-amber-300">Native Icon Search</strong> instead for cleaner, mathematically perfect vectors!
+                  </p>
                 </div>
               </div>
             </div>

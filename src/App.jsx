@@ -21,8 +21,10 @@ import { SkeletonCard, SkeletonInspector } from './components/SkeletonLoader';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ColorSliders } from './components/ColorSliders';
 import ImageTracerModal from './components/ImageTracerModal';
+import IconSearchModal from './components/IconSearchModal';
 import VectorSpaceLogo from './components/VectorSpaceLogo';
 import HelpGuide from './components/HelpGuide';
+import AIGeneratorModal from './components/AIGeneratorModal';
 
 // Pre-loaded icons for the Icon Library Browser
 const PRELOADED_ICONS = [
@@ -110,6 +112,41 @@ const generateTailwindShades = (hex) => {
   } catch {
     return [];
   }
+};
+
+// Safely resize SVG string without breaking internal elements
+const formatSvg = (svgStr, sizeObj, newStrokeWidth) => {
+  if (!svgStr || typeof svgStr !== 'string') return '';
+  let formatted = svgStr;
+
+  // Only modify the attributes on the opening <svg> tag.
+  formatted = formatted.replace(/<svg([^>]*)>/i, (match, attrs) => {
+    let newAttrs = attrs;
+
+    if (sizeObj && sizeObj.width) {
+      if (/width="[^"]*"/i.test(newAttrs)) {
+        newAttrs = newAttrs.replace(/width="[^"]*"/i, `width="${sizeObj.width}"`);
+      } else {
+        newAttrs += ` width="${sizeObj.width}"`;
+      }
+    }
+
+    if (sizeObj && sizeObj.height) {
+      if (/height="[^"]*"/i.test(newAttrs)) {
+        newAttrs = newAttrs.replace(/height="[^"]*"/i, `height="${sizeObj.height}"`);
+      } else {
+        newAttrs += ` height="${sizeObj.height}"`;
+      }
+    }
+
+    return `<svg${newAttrs}>`;
+  });
+
+  if (newStrokeWidth !== undefined) {
+    formatted = formatted.replace(/stroke-width="[^"]*"/g, `stroke-width="${newStrokeWidth}"`);
+  }
+
+  return formatted;
 };
 
 // Seeds for first loading
@@ -203,6 +240,8 @@ export default function App() {
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [saveStatus, setSaveStatus] = useState('saved');
   const [isHelpGuideOpen, setIsHelpGuideOpen] = useState(false);
+  const [isIconSearchOpen, setIsIconSearchOpen] = useState(false);
+  const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
   const hasLoadedFromCloud = useRef(false);
 
   const [workspaces, setWorkspaces] = useState(() => {
@@ -232,18 +271,27 @@ export default function App() {
     }
   });
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(workspaces[0]?.id || '');
-
+  
+  const [folders, setFolders] = useState(() => {
+    try {
+      const stored = localStorage.getItem('wv_folders');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeFolderId, setActiveFolderId] = useState(null);
   // --- UNDO / REDO HISTORY ARCHITECTURE ---
   const historyRef = useRef({ stack: [], index: -1 });
 
   const commitAssetsUpdate = (newAssetsOrCallback) => {
     setAssets(prevAssets => {
       const nextAssets = typeof newAssetsOrCallback === 'function' ? newAssetsOrCallback(prevAssets) : newAssetsOrCallback;
-      
+
       let { stack, index } = historyRef.current;
       if (stack.length === 0) {
-         stack.push(prevAssets);
-         index = 0;
+        stack.push(prevAssets);
+        index = 0;
       }
       stack = stack.slice(0, index + 1);
       stack.push(nextAssets);
@@ -251,7 +299,7 @@ export default function App() {
         stack.shift();
       }
       historyRef.current = { stack, index: stack.length - 1 };
-      
+
       return nextAssets;
     });
   };
@@ -284,7 +332,7 @@ export default function App() {
     swipeStartX.current = e.touches[0].clientX;
     setSwipeOffset({ id: assetId, offset: 0 });
   };
-  
+
   const handleTouchMove = (e, assetId) => {
     if (swipeOffset.id !== assetId) return;
     const diff = e.touches[0].clientX - swipeStartX.current;
@@ -292,7 +340,7 @@ export default function App() {
       setSwipeOffset({ id: assetId, offset: Math.max(diff, -100) }); // max 100px left
     }
   };
-  
+
   const handleTouchEnd = (e, assetId) => {
     if (swipeOffset.id === assetId) {
       if (swipeOffset.offset <= -60) {
@@ -350,7 +398,7 @@ export default function App() {
 
   // Active Asset Selection
   const [selectedAssetId, setSelectedAssetId] = useState(null);
-  
+
   // Recent Assets Rail
   const [recentAssets, setRecentAssets] = useState(() => {
     try {
@@ -394,8 +442,10 @@ export default function App() {
   const [isEditingAsset, setIsEditingAsset] = useState(false);
   const [editAssetName, setEditAssetName] = useState('');
   const [editAssetValue, setEditAssetValue] = useState('');
+  const [codeUndoCache, setCodeUndoCache] = useState(null);
   const [editAssetTags, setEditAssetTags] = useState('');
   const [editAssetNotes, setEditAssetNotes] = useState('');
+  const [editFolderId, setEditFolderId] = useState(null);
 
   // Code Snippet generator active tab
   const [snippetTab, setSnippetTab] = useState('tailwind');
@@ -426,13 +476,13 @@ export default function App() {
   const handleContextMenuAction = (action, payload) => {
     const asset = contextMenuState.asset;
     if (!asset) return;
-    
+
     if (action === 'copy') triggerCopy(asset.value);
-    else if (action === 'pin') togglePinAsset(asset.id, { stopPropagation: () => {} });
-    else if (action === 'duplicate') duplicateAsset(asset, { stopPropagation: () => {} });
-    else if (action === 'delete') handleDeleteAsset(asset.id, { stopPropagation: () => {} });
+    else if (action === 'pin') togglePinAsset(asset.id, { stopPropagation: () => { } });
+    else if (action === 'duplicate') duplicateAsset(asset, { stopPropagation: () => { } });
+    else if (action === 'delete') handleDeleteAsset(asset.id, { stopPropagation: () => { } });
     else if (action === 'move') moveAssetToWorkspace(asset.id, payload);
-    
+
     setContextMenuState(prev => ({ ...prev, isOpen: false }));
   };
 
@@ -575,12 +625,16 @@ export default function App() {
           const parsedWS = storedWS ? JSON.parse(storedWS) : INITIAL_WORKSPACES;
           const storedAssets = localStorage.getItem('wv_assets');
           const parsedAssets = storedAssets ? JSON.parse(storedAssets) : INITIAL_ASSETS;
+          const storedFolders = localStorage.getItem('wv_folders');
+          const parsedFolders = storedFolders ? JSON.parse(storedFolders) : [];
           const { workspaces: mWS, assets: mAssets } = migrateIndigoToTeal(parsedWS, parsedAssets);
           setWorkspaces(mWS);
           setAssets(mAssets);
+          setFolders(parsedFolders);
         } catch {
           setWorkspaces(INITIAL_WORKSPACES);
           setAssets(INITIAL_ASSETS);
+          setFolders([]);
         }
       }
     };
@@ -604,6 +658,7 @@ export default function App() {
             await setDoc(userDocRef, {
               workspaces,
               assets,
+              folders,
               updatedAt: new Date().toISOString()
             });
             setSaveStatus('saved');
@@ -617,6 +672,7 @@ export default function App() {
       } else {
         localStorage.setItem('wv_workspaces', JSON.stringify(workspaces));
         localStorage.setItem('wv_assets', JSON.stringify(assets));
+        localStorage.setItem('wv_folders', JSON.stringify(folders));
         setSaveStatus('saved');
       }
     }, 1500);
@@ -625,7 +681,7 @@ export default function App() {
       clearTimeout(statusTimer);
       clearTimeout(handler);
     };
-  }, [workspaces, assets, user, isLoading]);
+  }, [workspaces, assets, folders, user, isLoading]);
 
   // Effects: Seed missing default assets if needed
   useEffect(() => {
@@ -695,7 +751,7 @@ export default function App() {
 
   // Derived Assets
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
-  
+
   // Available Tags (for Autocomplete)
   const availableTags = useMemo(() => {
     const tagsSet = new Set();
@@ -709,6 +765,16 @@ export default function App() {
 
   const workspaceAssets = useMemo(() => {
     let filtered = assets.filter(a => a.workspaceId === activeWorkspaceId);
+    
+    // Filter by active folder if one is selected
+    if (activeFolderId) {
+      filtered = filtered.filter(a => a.folderId === activeFolderId);
+    } else {
+      // If no folder is selected, optionally we could only show root assets, 
+      // but to preserve standard behavior, we'll show all assets in the workspace.
+      // We will add an 'Uncategorized' virtual folder later if needed.
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(a => a.name.toLowerCase().includes(q) || a.type.includes(q) || (a.tags && a.tags.toLowerCase().includes(q)));
@@ -747,7 +813,7 @@ export default function App() {
       sorted.sort((a, b) => a.id.localeCompare(b.id));
     }
     return sorted;
-  }, [assets, activeWorkspaceId, searchQuery, sortMode, activeTypeFilter]);
+  }, [assets, activeWorkspaceId, searchQuery, sortMode, activeTypeFilter, activeFolderId]);
 
   const activeAsset = useMemo(() => assets.find(a => a.id === selectedAssetId), [assets, selectedAssetId]);
 
@@ -777,7 +843,7 @@ export default function App() {
       const isSameWs = a.workspaceId === activeAsset.workspaceId;
       const isSameType = a.type === activeAsset.type;
       const hasSameTag = a.tags && activeAsset.tags && a.tags.split(',').some(t => activeAsset.tags.includes(t.trim()));
-      
+
       // Basic heuristic: same type, same workspace or same tags
       if (isSameType && (isSameWs || hasSameTag)) return true;
       return false;
@@ -822,6 +888,7 @@ export default function App() {
       name: newAssetName.replace(/\s+/g, ' ').trim(),
       value: newAssetValue,
       tags: newAssetTags,
+      folderId: activeFolderId,
       isPinned: false,
       notes: '',
       history: [],
@@ -1000,6 +1067,7 @@ export default function App() {
       name: editAssetName,
       value: editAssetValue,
       tags: editAssetTags,
+      folderId: editFolderId,
       notes: editAssetNotes,
       history: nextHistory,
       lastModified: new Date().toISOString()
@@ -1154,26 +1222,26 @@ export default function App() {
       showToast('You must be logged in to share workspaces by email.', 'error');
       return false;
     }
-    
+
     try {
       showToast(`Looking up user ${targetEmail}...`, 'info');
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('email', '==', targetEmail));
       const querySnapshot = await getDocs(q);
-      
+
       if (querySnapshot.empty) {
         showToast('No VectorSpace user found with that email.', 'error');
         return false;
       }
-      
+
       const targetUserDoc = querySnapshot.docs[0];
       const targetUid = targetUserDoc.id;
-      
+
       const wsToShare = workspaces.find(w => w.id === workspaceId);
       const wsAssets = assets.filter(a => a.workspaceId === workspaceId);
-      
+
       if (!wsToShare) return false;
-      
+
       const sharedRef = doc(db, 'users', targetUid, 'vault', 'shared', workspaceId);
       await setDoc(sharedRef, {
         workspace: {
@@ -1184,7 +1252,7 @@ export default function App() {
         sharedBy: user.email,
         sharedAt: new Date().toISOString()
       });
-      
+
       showToast(`Workspace shared with ${targetEmail}!`, 'success');
       return true;
     } catch (error) {
@@ -1348,15 +1416,17 @@ export default function App() {
   // Onboarding metadata configurations
   const onboardingSteps = [
     { title: 'Welcome to VectorSpace 🚀', text: 'This interactive guide will introduce you to your design tokens workspace. Tap next to begin!', select: 'header' },
-    { title: 'Isolated Workspace Environments', text: 'Define separate systems (e.g. Identity primitives, dashboards) in the sidebar. Color codes keep them clean.', select: 'aside' },
-    { title: 'Inject Core Design Assets', text: 'Create tokens: colors, custom gradients, SVG codes, typography specs, shadow styles, or before/after image sliders.', select: 'form' },
+    { title: 'Isolated Workspaces & Folders', text: 'Define separate systems (e.g. Identity primitives, dashboards) and nest them using dynamic Folders in the sidebar.', select: 'aside' },
+    { title: 'Inject Core Design Assets', text: 'Create tokens: colors, custom gradients, SVG codes, typography specs, shadow styles, or use the AI Generator via the top toolbar!', select: 'form' },
     { title: 'Registry Operations & Sorting', text: 'Drag cards to manually reorder. Switch to List mode, use Bulk Select, and search using spotlight (/) key.', select: 'toolbar' },
-    { title: 'Advanced details & Dev Sandbox', text: 'Click any card to inspect color palettes, run WCAG AA/AAA tests, adjust SVG sizes, copy SwiftUI codes, and check components live!', select: 'details' }
+    { title: 'Advanced details & Dev Sandbox', text: 'Click any card to inspect color palettes, format code snippets, optimize SVGs, reassign folders, and check components live!', select: 'details' }
   ];
 
   // Build Context Value
   const appContextValue = {
     workspaces, setWorkspaces,
+    folders, setFolders,
+    activeFolderId, setActiveFolderId,
     assets, setAssets,
     activeWorkspaceId, setActiveWorkspaceId,
     activeWorkspace,
@@ -1574,11 +1644,10 @@ export default function App() {
               <button
                 key={ws.id}
                 onClick={() => { setActiveWorkspaceId(ws.id); setSelectedAssetId(null); }}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center space-x-1.5 ${
-                  activeWorkspaceId === ws.id 
-                    ? 'bg-[var(--accent-light)] text-[var(--accent)] ring-1 ring-[var(--accent-ring)]'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center space-x-1.5 ${activeWorkspaceId === ws.id
+                  ? 'bg-[var(--accent-light)] text-[var(--accent)] ring-1 ring-[var(--accent-ring)]'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}
               >
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ws.color || '#cbd5e1' }} />
                 <span>{ws.name}</span>
@@ -1614,7 +1683,7 @@ export default function App() {
               <div className="flex overflow-x-auto no-scrollbar space-x-2 pb-2">
                 <span className="flex-shrink-0 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase flex items-center pr-2 border-r border-slate-200 dark:border-slate-800">Recent</span>
                 {recentAssetsData.map(asset => (
-                  <button 
+                  <button
                     key={`recent-${asset.id}`}
                     onClick={() => { setActiveWorkspaceId(asset.workspaceId); setSelectedAssetId(asset.id); }}
                     className="flex-shrink-0 flex items-center space-x-2 px-3 py-1.5 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700/50 rounded-lg transition-colors text-xs text-slate-600 dark:text-slate-300 font-medium"
@@ -1636,6 +1705,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-1.5 font-medium">{activeWorkspace?.description}</p>
                 </div>
                 <div className="flex space-x-2">
+                  <button 
+                    onClick={() => setIsAIGeneratorOpen(true)}
+                    className="bg-[var(--accent)] hover:opacity-90 text-white text-[10px] font-bold px-3 py-2 rounded-xl transition-all shadow-sm flex items-center space-x-1 shadow-[var(--accent-ring)]"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+                    <span>AI Generate</span>
+                  </button>
                   <div className="group relative">
                     <button className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm self-start flex items-center space-x-1">
                       <span>Export</span>
@@ -1659,9 +1735,15 @@ export default function App() {
                     <div className="flex space-x-2">
                       {/* SVG Icon Library Trigger */}
                       {newAssetType === 'svg' && (
-                        <button type="button" onClick={() => setShowIconLibrary(true)} className="text-[10px] font-extrabold text-[var(--accent)] bg-[var(--accent-light)] hover:bg-[var(--accent)] hover:text-white px-2.5 py-1 rounded-lg transition-all">
-                          Browse Preset SVGs
-                        </button>
+                        <>
+                          <button type="button" onClick={() => setShowIconLibrary(true)} className="text-[10px] font-extrabold text-[var(--accent)] bg-[var(--accent-light)] hover:bg-[var(--accent)] hover:text-white px-2.5 py-1 rounded-lg transition-all">
+                            Browse Preset SVGs
+                          </button>
+                          <button type="button" onClick={() => setIsIconSearchOpen(true)} className="text-[10px] font-extrabold text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 px-2.5 py-1 rounded-lg transition-all flex items-center space-x-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <span>Search Libraries</span>
+                          </button>
+                        </>
                       )}
 
                       {/* Gradient Builder Trigger */}
@@ -1893,213 +1975,213 @@ export default function App() {
                         onDrop={(e) => handleDrop(e, index)}
                         onDragEnd={handleDragEnd}
                         onClick={() => {
-                        if (bulkSelectMode) {
-                          const next = new Set(selectedIds);
-                          if (next.has(asset.id)) next.delete(asset.id);
-                          else next.add(asset.id);
-                          setSelectedIds(next);
-                        } else {
-                          setSelectedAssetId(asset.id);
-                          setIsEditingAsset(false);
-                        }
-                      }}
-                      onDoubleClick={() => {
-                        if (bulkSelectMode) return;
-                        setInlineEditAssetId(asset.id);
-                        setInlineEditForm({ name: asset.name, value: asset.value });
-                      }}
-                      onBlur={(e) => {
-                        if (inlineEditAssetId === asset.id && !e.currentTarget.contains(e.relatedTarget)) {
-                          handleInlineSave(asset);
-                        }
-                      }}
-                      onContextMenu={(e) => handleContextMenu(e, asset)}
-                      className={`card-shine-hover group relative p-4 rounded-2xl border transition-all cursor-pointer select-none flex animate-card-enter ${viewMode === 'list' ? 'flex-row items-center justify-between space-x-4' : 'flex-col min-h-[160px]'
-                        } ${isSelected
-                          ? 'bg-[var(--accent-light)] dark:bg-[var(--accent-light)] border-[var(--accent-ring)] shadow-md ring-2 ring-[var(--accent-light)]'
-                          : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 hover:shadow-[0_0_15px_var(--card-glow)] hover:border-[var(--card-glow)]'
-                        } ${draggedIndex === index ? 'opacity-50 scale-95' : 'opacity-100'}`}
-                      style={{
-                        '--card-glow': asset.type === 'color' ? asset.value : (asset.type === 'gradient' ? 'var(--accent)' : 'var(--accent)'),
-                        animationDelay: `${Math.min(index * 40, 400)}ms`,
-                        transform: swipeOffset.id === asset.id ? `translateX(${swipeOffset.offset}px)` : 'translateX(0)',
-                        transition: swipeOffset.id === asset.id ? 'none' : 'transform 0.2s ease-out'
-                      }}
-                    >
+                          if (bulkSelectMode) {
+                            const next = new Set(selectedIds);
+                            if (next.has(asset.id)) next.delete(asset.id);
+                            else next.add(asset.id);
+                            setSelectedIds(next);
+                          } else {
+                            setSelectedAssetId(asset.id);
+                            setIsEditingAsset(false);
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (bulkSelectMode) return;
+                          setInlineEditAssetId(asset.id);
+                          setInlineEditForm({ name: asset.name, value: asset.value });
+                        }}
+                        onBlur={(e) => {
+                          if (inlineEditAssetId === asset.id && !e.currentTarget.contains(e.relatedTarget)) {
+                            handleInlineSave(asset);
+                          }
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, asset)}
+                        className={`card-shine-hover group relative p-4 rounded-2xl border transition-all cursor-pointer select-none flex animate-card-enter ${viewMode === 'list' ? 'flex-row items-center justify-between space-x-4' : 'flex-col min-h-[160px]'
+                          } ${isSelected
+                            ? 'bg-[var(--accent-light)] dark:bg-[var(--accent-light)] border-[var(--accent-ring)] shadow-md ring-2 ring-[var(--accent-light)]'
+                            : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 hover:shadow-[0_0_15px_var(--card-glow)] hover:border-[var(--card-glow)]'
+                          } ${draggedIndex === index ? 'opacity-50 scale-95' : 'opacity-100'}`}
+                        style={{
+                          '--card-glow': asset.type === 'color' ? asset.value : (asset.type === 'gradient' ? 'var(--accent)' : 'var(--accent)'),
+                          animationDelay: `${Math.min(index * 40, 400)}ms`,
+                          transform: swipeOffset.id === asset.id ? `translateX(${swipeOffset.offset}px)` : 'translateX(0)',
+                          transition: swipeOffset.id === asset.id ? 'none' : 'transform 0.2s ease-out'
+                        }}
+                      >
 
-                      {/* Card header controls */}
-                      <div className={`flex justify-between items-start ${viewMode === 'grid' ? 'mb-3' : 'flex-1 items-center'}`}>
-                        <div className="flex items-center space-x-2 truncate pr-2 w-full">
-                          {bulkSelectMode && (
-                            <div onClick={(e) => { e.stopPropagation(); handleToggleSelectAsset(asset.id, e); }} className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${isChecked ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-slate-300 dark:border-slate-600'}`}>
-                              {isChecked && <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                            </div>
-                          )}
-                          <div className="truncate w-full">
-                            <h3 className={`text-xs font-black tracking-wide flex items-center truncate ${isSelected ? 'text-[#1A252C] dark:text-[#94D2BD]' : 'text-slate-800 dark:text-slate-100'}`}>
-                              <div className={`w-1.5 h-1.5 mr-1.5 rounded-full ${ageColor} flex-shrink-0`} title={ageTooltip} />
-                              {asset.isPinned && <span className="text-amber-500 mr-1 flex-shrink-0">★</span>}
-                              
-                              {inlineEditAssetId === asset.id ? (
-                                <input
-                                  autoFocus
-                                  className="bg-transparent border-b border-[var(--accent)] focus:outline-none w-full px-1 text-xs text-slate-900 dark:text-white"
-                                  value={inlineEditForm.name}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => setInlineEditForm(f => ({ ...f, name: e.target.value }))}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleInlineSave(asset);
-                                    if (e.key === 'Escape') setInlineEditAssetId(null);
-                                  }}
-                                />
-                              ) : (
-                                <span className="truncate">{asset.name}</span>
+                        {/* Card header controls */}
+                        <div className={`flex justify-between items-start ${viewMode === 'grid' ? 'mb-3' : 'flex-1 items-center'}`}>
+                          <div className="flex items-center space-x-2 truncate pr-2 w-full">
+                            {bulkSelectMode && (
+                              <div onClick={(e) => { e.stopPropagation(); handleToggleSelectAsset(asset.id, e); }} className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${isChecked ? 'bg-[var(--accent)] border-[var(--accent)]' : 'border-slate-300 dark:border-slate-600'}`}>
+                                {isChecked && <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                              </div>
+                            )}
+                            <div className="truncate w-full">
+                              <h3 className={`text-xs font-black tracking-wide flex items-center truncate ${isSelected ? 'text-[#1A252C] dark:text-[#94D2BD]' : 'text-slate-800 dark:text-slate-100'}`}>
+                                <div className={`w-1.5 h-1.5 mr-1.5 rounded-full ${ageColor} flex-shrink-0`} title={ageTooltip} />
+                                {asset.isPinned && <span className="text-amber-500 mr-1 flex-shrink-0">★</span>}
+
+                                {inlineEditAssetId === asset.id ? (
+                                  <input
+                                    autoFocus
+                                    className="bg-transparent border-b border-[var(--accent)] focus:outline-none w-full px-1 text-xs text-slate-900 dark:text-white"
+                                    value={inlineEditForm.name}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => setInlineEditForm(f => ({ ...f, name: e.target.value }))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleInlineSave(asset);
+                                      if (e.key === 'Escape') setInlineEditAssetId(null);
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="truncate">{asset.name}</span>
+                                )}
+                              </h3>
+                              {viewMode === 'grid' && (
+                                <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full inline-block mt-1">{asset.type}</span>
                               )}
-                            </h3>
-                            {viewMode === 'grid' && (
-                              <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full inline-block mt-1">{asset.type}</span>
-                            )}
+                            </div>
                           </div>
-                        </div>
 
-                      {/* Desktop Hover Quick Actions */}
-                      {!bulkSelectMode && (
-                        <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => togglePinAsset(asset.id, e)} className={`text-slate-400 hover:text-amber-500 transition-colors bg-slate-50 dark:bg-slate-750 p-1.5 rounded-full ${asset.isPinned ? 'text-amber-500' : ''}`}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                          </button>
-                          <button onClick={(e) => duplicateAsset(asset, e)} className="text-slate-400 hover:text-[var(--accent)] transition-colors bg-slate-50 dark:bg-slate-750 p-1.5 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteAsset(asset.id, e); }} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 dark:bg-slate-750 p-1.5 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* PREVIEW CONTAINER BASED ON TYPE */}
-                    {asset.type === 'color' || asset.type === 'gradient' ? (
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className={`w-full ${viewMode === 'list' ? 'h-6' : 'h-20 mb-2'} rounded-xl shadow-inner overflow-hidden flex ring-1 ring-black/5 dark:ring-white/10`} style={{ background: asset.value }}></div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            {inlineEditAssetId === asset.id ? (
-                               <input
-                                  className="bg-transparent border-none text-[10px] text-slate-800 dark:text-slate-200 font-mono font-bold w-full focus:outline-none focus:ring-1 focus:ring-[var(--accent-ring)] rounded px-1"
-                                  value={inlineEditForm.value}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => setInlineEditForm(f => ({ ...f, value: e.target.value }))}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleInlineSave(asset);
-                                    if (e.key === 'Escape') setInlineEditAssetId(null);
-                                  }}
-                               />
-                            ) : (
-                               <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[130px]">{asset.value}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : asset.type === 'svg' ? (
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className={`${viewMode === 'list' ? 'w-10 h-10' : 'h-20 mb-2 w-full'} flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-350 relative overflow-hidden group/svg`}>
-                          <div className="absolute inset-0 bg-grid-slate-200/50 dark:bg-grid-slate-700/20 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]"></div>
-                          <div className={`relative z-10 transition-transform group-hover/svg:scale-105 ${viewMode === 'list' ? 'scale-75' : ''}`} dangerouslySetInnerHTML={{ __html: asset.value.replace(/stroke-width="[^"]*"/, `stroke-width="1.8"`).replace(/width="[^"]*"/, `width="28"`).replace(/height="[^"]*"/, `height="28"`) }} />
-                        </div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate">&lt;svg&gt; vector</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : asset.type === 'compare' ? (
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className="mb-2">
-                          {asset.value && asset.value.includes('|') ? (
-                            <ImageComparisonSlider beforeUrl={asset.value.split('|')[0]} afterUrl={asset.value.split('|')[1]} viewMode={viewMode} />
-                          ) : (
-                            <div className="h-20 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center text-[10px] text-slate-400">
-                              Invalid comparison URLs
+                          {/* Desktop Hover Quick Actions */}
+                          {!bulkSelectMode && (
+                            <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={(e) => togglePinAsset(asset.id, e)} className={`text-slate-400 hover:text-amber-500 transition-colors bg-slate-50 dark:bg-slate-750 p-1.5 rounded-full ${asset.isPinned ? 'text-amber-500' : ''}`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                              </button>
+                              <button onClick={(e) => duplicateAsset(asset, e)} className="text-slate-400 hover:text-[var(--accent)] transition-colors bg-slate-50 dark:bg-slate-750 p-1.5 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteAsset(asset.id, e); }} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 dark:bg-slate-750 p-1.5 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                              </button>
                             </div>
                           )}
                         </div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold">Image slider comparison</span>
+
+                        {/* PREVIEW CONTAINER BASED ON TYPE */}
+                        {asset.type === 'color' || asset.type === 'gradient' ? (
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className={`w-full ${viewMode === 'list' ? 'h-6' : 'h-20 mb-2'} rounded-xl shadow-inner overflow-hidden flex ring-1 ring-black/5 dark:ring-white/10`} style={{ background: asset.value }}></div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                {inlineEditAssetId === asset.id ? (
+                                  <input
+                                    className="bg-transparent border-none text-[10px] text-slate-800 dark:text-slate-200 font-mono font-bold w-full focus:outline-none focus:ring-1 focus:ring-[var(--accent-ring)] rounded px-1"
+                                    value={inlineEditForm.value}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => setInlineEditForm(f => ({ ...f, value: e.target.value }))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleInlineSave(asset);
+                                      if (e.key === 'Escape') setInlineEditAssetId(null);
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[130px]">{asset.value}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ) : asset.type === 'typography' ? (
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50 overflow-hidden relative shadow-sm`}>
-                          <span className="text-slate-800 dark:text-slate-100 text-sm truncate" style={{ font: asset.value }}>Aa Design Typo</span>
-                        </div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            {inlineEditAssetId === asset.id ? (
-                               <input
-                                  className="bg-transparent border-none text-[10px] text-slate-800 dark:text-slate-200 font-mono font-bold w-full focus:outline-none focus:ring-1 focus:ring-[var(--accent-ring)] rounded px-1"
-                                  value={inlineEditForm.value}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => setInlineEditForm(f => ({ ...f, value: e.target.value }))}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleInlineSave(asset);
-                                    if (e.key === 'Escape') setInlineEditAssetId(null);
-                                  }}
-                               />
-                            ) : (
-                               <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">{asset.value}</span>
+                        ) : asset.type === 'svg' ? (
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className={`${viewMode === 'list' ? 'w-10 h-10' : 'h-20 mb-2 w-full'} flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-350 relative overflow-hidden group/svg`}>
+                              <div className="absolute inset-0 bg-grid-slate-200/50 dark:bg-grid-slate-700/20 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]"></div>
+                              <div className={`relative z-10 transition-transform group-hover/svg:scale-105 ${viewMode === 'list' ? 'scale-75' : ''}`} dangerouslySetInnerHTML={{ __html: formatSvg(asset.value, { width: '28', height: '28' }, '1.8') }} />
+                            </div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate">&lt;svg&gt; vector</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : asset.type === 'compare' ? (
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className="mb-2">
+                              {asset.value && asset.value.includes('|') ? (
+                                <ImageComparisonSlider beforeUrl={asset.value.split('|')[0]} afterUrl={asset.value.split('|')[1]} viewMode={viewMode} />
+                              ) : (
+                                <div className="h-20 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center text-[10px] text-slate-400">
+                                  Invalid comparison URLs
+                                </div>
+                              )}
+                            </div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold">Image slider comparison</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : asset.type === 'typography' ? (
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50 overflow-hidden relative shadow-sm`}>
+                              <span className="text-slate-800 dark:text-slate-100 text-sm truncate" style={{ font: asset.value }}>Aa Design Typo</span>
+                            </div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                {inlineEditAssetId === asset.id ? (
+                                  <input
+                                    className="bg-transparent border-none text-[10px] text-slate-800 dark:text-slate-200 font-mono font-bold w-full focus:outline-none focus:ring-1 focus:ring-[var(--accent-ring)] rounded px-1"
+                                    value={inlineEditForm.value}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => setInlineEditForm(f => ({ ...f, value: e.target.value }))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleInlineSave(asset);
+                                      if (e.key === 'Escape') setInlineEditAssetId(null);
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">{asset.value}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : asset.type === 'image' ? (
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50 overflow-hidden relative shadow-sm`}>
+                              <img src={asset.value} alt={asset.name} className="w-full h-full object-cover" onError={(e) => e.target.style.display = 'none'} />
+                            </div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">Image URL</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : asset.type === 'code' ? (
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex items-center justify-start p-2 bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden relative shadow-sm`}>
+                              <pre className="text-[8px] text-slate-300 font-mono text-left w-full h-full overflow-hidden whitespace-pre-wrap">{asset.value}</pre>
+                            </div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">Code Snippet</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Shadow Type */
+                          <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
+                            <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex items-center justify-center bg-slate-100 dark:bg-slate-900/50 rounded-xl relative overflow-hidden`}>
+                              <div className="w-16 h-8 bg-white dark:bg-slate-800 rounded-lg" style={{ boxShadow: asset.value }}></div>
+                            </div>
+                            {viewMode === 'grid' && (
+                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">{asset.value}</span>
+                              </div>
                             )}
                           </div>
                         )}
-                      </div>
-                    ) : asset.type === 'image' ? (
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50 overflow-hidden relative shadow-sm`}>
-                          <img src={asset.value} alt={asset.name} className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} />
-                        </div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">Image URL</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : asset.type === 'code' ? (
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex items-center justify-start p-2 bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden relative shadow-sm`}>
-                          <pre className="text-[8px] text-slate-300 font-mono text-left w-full h-full overflow-hidden whitespace-pre-wrap">{asset.value}</pre>
-                        </div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">Code Snippet</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Shadow Type */
-                      <div className={`flex flex-col justify-end ${viewMode === 'list' ? 'w-48 sm:w-56' : ''}`}>
-                        <div className={`${viewMode === 'list' ? 'h-8' : 'h-20 mb-2 w-full'} flex items-center justify-center bg-slate-100 dark:bg-slate-900/50 rounded-xl relative overflow-hidden`}>
-                          <div className="w-16 h-8 bg-white dark:bg-slate-800 rounded-lg" style={{ boxShadow: asset.value }}></div>
-                        </div>
-                        {viewMode === 'grid' && (
-                          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate max-w-[135px]">{asset.value}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
-                    {/* Drag Handle or Indicator */}
-                    {viewMode === 'grid' && isReorderEnabled && (
-                      <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-40 cursor-grab active:cursor-grabbing text-slate-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                        {/* Drag Handle or Indicator */}
+                        {viewMode === 'grid' && isReorderEnabled && (
+                          <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-40 cursor-grab active:cursor-grabbing text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-                );
-              })
+                    </div>
+                  );
+                })
               ) : (
                 <div className="col-span-full py-20 flex flex-col items-center justify-center text-center animate-fade-in">
                   <div className="w-48 h-48 mb-6 text-slate-300 dark:text-slate-700 animate-float">
@@ -2156,16 +2238,13 @@ export default function App() {
                       <div
                         className="transition-transform hover:scale-110"
                         style={{ color: 'var(--accent)' }}
-                        dangerouslySetInnerHTML={{ __html: activeAsset.value
-                          .replace(/width="[^"]*"/, 'width="56"')
-                          .replace(/height="[^"]*"/, 'height="56"')
-                          .replace(/stroke-width="[^"]*"/g, `stroke-width="${svgStroke}"`) }}
+                        dangerouslySetInnerHTML={{ __html: formatSvg(activeAsset.value, { width: '56', height: '56' }, svgStroke) }}
                       />
                     </div>
                   )}
                   {activeAsset.type === 'image' && (
                     <div className="h-28 w-full overflow-hidden">
-                      <img src={activeAsset.value} alt={activeAsset.name} className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} />
+                      <img src={activeAsset.value} alt={activeAsset.name} className="w-full h-full object-cover" onError={(e) => e.target.style.display = 'none'} />
                     </div>
                   )}
                   {activeAsset.type === 'typography' && (
@@ -2225,6 +2304,7 @@ export default function App() {
                         setEditAssetValue(activeAsset.value);
                         setEditAssetTags(activeAsset.tags || '');
                         setEditAssetNotes(activeAsset.notes || '');
+                        setEditFolderId(activeAsset.folderId || null);
                       }} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-250 p-2 rounded-xl text-slate-500 dark:text-slate-300">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                       </button>
@@ -2237,57 +2317,207 @@ export default function App() {
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 block mb-1">Value Primitives</label>
                     <div className="p-5">
-                    {isEditingAsset ? (
-                      <div className="space-y-3">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Value Payload</label>
-                        {activeAsset.type === 'svg' ? (
-                          <textarea
-                            value={editAssetValue}
-                            onChange={(e) => setEditAssetValue(e.target.value)}
-                            className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)] h-32"
-                          />
-                        ) : activeAsset.type === 'color' ? (
-                          <div className="space-y-4">
-                            <div className="flex space-x-2">
-                              <input
-                                type="color"
-                                value={editAssetValue}
-                                onChange={(e) => setEditAssetValue(e.target.value)}
-                                className="w-10 h-10 rounded-xl cursor-pointer bg-transparent border-0 p-0"
-                              />
-                              <input
-                                type="text"
-                                value={editAssetValue}
-                                onChange={(e) => setEditAssetValue(e.target.value)}
-                                className="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)]"
-                              />
-                            </div>
-                            <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-sm">
-                              <span className="text-[10px] font-bold uppercase text-slate-400 mb-2 block">Live Adjust</span>
-                              <ColorSliders hexColor={editAssetValue} onChange={setEditAssetValue} />
-                            </div>
+                      {isEditingAsset ? (
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] font-bold uppercase text-slate-400 block">Value Payload</label>
+                            {(activeAsset.type === 'svg' || activeAsset.type === 'code') && (
+                              <div className="flex space-x-1">
+                                {codeUndoCache && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditAssetValue(codeUndoCache);
+                                      setCodeUndoCache(null);
+                                      showToast('Action undone', 'success');
+                                    }}
+                                    className="text-[9px] font-bold uppercase tracking-wider text-slate-500 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-2 py-1 rounded-md transition-colors"
+                                    title="Undo last change"
+                                  >
+                                    Undo
+                                  </button>
+                                )}
+                                {activeAsset.type === 'svg' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCodeUndoCache(editAssetValue);
+                                      let filled = editAssetValue
+                                        .replace(/fill="[^"]*"/gi, 'fill="currentColor"')
+                                        .replace(/stroke="[^"]*"/gi, 'stroke="currentColor"');
+                                      setEditAssetValue(filled);
+                                      showToast('SVG forced to fill!', 'success');
+                                    }}
+                                    className="text-[9px] font-bold uppercase tracking-wider text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-500 hover:text-white px-2 py-1 rounded-md transition-colors"
+                                    title="Force fill to currentColor"
+                                  >
+                                    Fill
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCodeUndoCache(editAssetValue);
+                                    if (activeAsset.type === 'svg') {
+                                      let cleaned = editAssetValue
+                                        .replace(/fill="(?!(none|transparent|currentColor))[^"]*"/gi, 'fill="currentColor"')
+                                        .replace(/stroke="(?!(none|transparent|currentColor))[^"]*"/gi, 'stroke="currentColor"')
+                                        .replace(/<g[^>]*>/gi, '')
+                                        .replace(/<\/g>/gi, '')
+                                        .replace(/\s+id="[^"]*"/gi, '')
+                                        .replace(/\s+class="[^"]*"/gi, '')
+                                        .replace(/>\s+</g, '><')
+                                        .trim();
+                                      setEditAssetValue(cleaned);
+                                      showToast('SVG code cleaned and optimized!', 'success');
+                                    } else if (activeAsset.type === 'code') {
+                                      let cleaned = editAssetValue.replace(/\n\s*\n/g, '\n').trim();
+                                      setEditAssetValue(cleaned);
+                                      showToast('Code cleaned and formatted!', 'success');
+                                    }
+                                  }}
+                                  className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent)] bg-[var(--accent-light)] hover:bg-[var(--accent)] hover:text-white px-2 py-1 rounded-md transition-colors border border-[var(--accent)]/20"
+                                  title="Clean & optimize code"
+                                >
+                                  Clean & Optimize
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <input
-                            type="text"
-                            value={editAssetValue}
-                            onChange={(e) => setEditAssetValue(e.target.value)}
-                            className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)]"
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      <div onClick={() => triggerCopy(activeAsset.value)} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 p-3 rounded-2xl cursor-pointer hover:border-[var(--accent)] font-mono text-[10px] text-slate-600 dark:text-slate-300 break-all select-all flex items-center justify-between">
-                        <span className="truncate max-w-[200px]">{activeAsset.value}</span>
-                        <svg className="text-slate-400" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                      </div>
-                    )}
+                          {activeAsset.type === 'svg' ? (
+                            <textarea
+                              value={editAssetValue}
+                              onChange={(e) => setEditAssetValue(e.target.value)}
+                              className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)] h-32"
+                            />
+                          ) : activeAsset.type === 'color' ? (
+                            <div className="space-y-4">
+                              <div className="flex space-x-2">
+                                <input
+                                  type="color"
+                                  value={editAssetValue}
+                                  onChange={(e) => setEditAssetValue(e.target.value)}
+                                  className="w-10 h-10 rounded-xl cursor-pointer bg-transparent border-0 p-0"
+                                />
+                                <input
+                                  type="text"
+                                  value={editAssetValue}
+                                  onChange={(e) => setEditAssetValue(e.target.value)}
+                                  className="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)]"
+                                />
+                              </div>
+                              <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-sm">
+                                <span className="text-[10px] font-bold uppercase text-slate-400 mb-2 block">Live Adjust</span>
+                                <ColorSliders hexColor={editAssetValue} onChange={setEditAssetValue} />
+                              </div>
+                            </div>
+                          ) : activeAsset.type === 'code' ? (
+                            <textarea
+                              value={editAssetValue}
+                              onChange={(e) => setEditAssetValue(e.target.value)}
+                              className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)] h-32"
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={editAssetValue}
+                              onChange={(e) => setEditAssetValue(e.target.value)}
+                              className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 font-mono focus:outline-none focus:border-[var(--accent)]"
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] font-bold uppercase text-slate-400 block">Value Payload</label>
+                            {(activeAsset.type === 'svg' || activeAsset.type === 'code') && (
+                              <div className="flex space-x-1">
+                                {codeUndoCache && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAssets(prev => prev.map(a => a.id === activeAsset.id ? { ...a, value: codeUndoCache } : a));
+                                      setCodeUndoCache(null);
+                                      showToast('Action undone', 'success');
+                                    }}
+                                    className="text-[9px] font-bold uppercase tracking-wider text-slate-500 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-2 py-1 rounded-md transition-colors"
+                                    title="Undo last change"
+                                  >
+                                    Undo
+                                  </button>
+                                )}
+                                {activeAsset.type === 'svg' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCodeUndoCache(activeAsset.value);
+                                      let filled = activeAsset.value
+                                        .replace(/fill="[^"]*"/gi, 'fill="currentColor"')
+                                        .replace(/stroke="[^"]*"/gi, 'stroke="currentColor"');
+                                      setAssets(prev => prev.map(a => a.id === activeAsset.id ? { ...a, value: filled, lastModified: new Date().toISOString() } : a));
+                                      showToast('SVG forced to fill!', 'success');
+                                    }}
+                                    className="text-[9px] font-bold uppercase tracking-wider text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-500 hover:text-white px-2 py-1 rounded-md transition-colors"
+                                    title="Force fill to currentColor"
+                                  >
+                                    Fill
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCodeUndoCache(activeAsset.value);
+                                    if (activeAsset.type === 'svg') {
+                                      let cleaned = activeAsset.value
+                                        .replace(/fill="(?!(none|transparent|currentColor))[^"]*"/gi, 'fill="currentColor"')
+                                        .replace(/stroke="(?!(none|transparent|currentColor))[^"]*"/gi, 'stroke="currentColor"')
+                                        .replace(/<g[^>]*>/gi, '')
+                                        .replace(/<\/g>/gi, '')
+                                        .replace(/\s+id="[^"]*"/gi, '')
+                                        .replace(/\s+class="[^"]*"/gi, '')
+                                        .replace(/>\s+</g, '><')
+                                        .trim();
+                                      setAssets(prev => prev.map(a => a.id === activeAsset.id ? { ...a, value: cleaned, lastModified: new Date().toISOString() } : a));
+                                      showToast('SVG code cleaned and optimized!', 'success');
+                                    } else if (activeAsset.type === 'code') {
+                                      let cleaned = activeAsset.value.replace(/\n\s*\n/g, '\n').trim();
+                                      setAssets(prev => prev.map(a => a.id === activeAsset.id ? { ...a, value: cleaned, lastModified: new Date().toISOString() } : a));
+                                      showToast('Code cleaned and formatted!', 'success');
+                                    }
+                                  }}
+                                  className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent)] bg-[var(--accent-light)] hover:bg-[var(--accent)] hover:text-white px-2 py-1 rounded-md transition-colors border border-[var(--accent)]/20"
+                                  title="Clean & optimize code"
+                                >
+                                  Clean & Optimize
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <div onClick={() => triggerCopy(activeAsset.value)} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 p-3 rounded-2xl cursor-pointer hover:border-[var(--accent)] font-mono text-[10px] text-slate-600 dark:text-slate-300 break-all select-all flex items-center justify-between">
+                            <span className="truncate max-w-[200px]">{activeAsset.value}</span>
+                            <svg className="text-slate-400" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Edit tags and notes fields */}
                   {isEditingAsset && (
                     <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1">Folder</label>
+                        <select
+                          value={editFolderId || ''}
+                          onChange={(e) => setEditFolderId(e.target.value || null)}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--accent)] text-slate-800 dark:text-slate-100"
+                        >
+                          <option value="">No Folder (Root)</option>
+                          {folders.filter(f => f.workspaceId === activeWorkspaceId).map(f => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
+                          ))}
+                        </select>
+                      </div>
                       <div>
                         <label className="text-[10px] font-bold text-slate-400 block mb-1">Tags</label>
                         <TagAutocompleteInput
@@ -2538,7 +2768,7 @@ export default function App() {
 
                       <div className="flex items-center space-x-2">
                         {activeAsset.type === 'svg' && sandboxApplied.showIconBtn && (
-                          <div className="text-[var(--accent)]" dangerouslySetInnerHTML={{ __html: activeAsset.value.replace(/width="[^"]*"/, 'width="18"').replace(/height="[^"]*"/, 'height="18"').replace(/stroke-width="[^"]*"/g, `stroke-width="${svgStroke}"`) }} />
+                          <div className="text-[var(--accent)]" dangerouslySetInnerHTML={{ __html: formatSvg(activeAsset.value, { width: '18', height: '18' }, svgStroke) }} />
                         )}
                         <h4
                           className="text-xs font-black text-slate-800 dark:text-slate-100"
@@ -2604,7 +2834,7 @@ export default function App() {
                         <div key={i} className="relative pl-6 flex justify-between items-center group">
                           {/* Dot marker */}
                           <div className="absolute left-[-2px] top-1/2 -translate-y-1/2 w-[6px] h-[6px] rounded-full bg-slate-400 group-hover:bg-[var(--accent)] group-hover:scale-150 transition-all shadow-[0_0_0_3px_white] dark:shadow-[0_0_0_3px_#1e293b]" />
-                          
+
                           <div className="truncate pr-2">
                             <div className="flex items-center space-x-2">
                               {activeAsset.type === 'color' && (
@@ -2618,7 +2848,7 @@ export default function App() {
                               })}
                             </span>
                           </div>
-                          
+
                           <button onClick={() => restoreHistoryVersion(hist.value)} className="opacity-0 group-hover:opacity-100 bg-[var(--accent-light)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white font-bold px-2 py-1 rounded-lg text-[9px] transition-all flex-shrink-0">
                             Restore
                           </button>
@@ -2657,7 +2887,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Related Tokens Panel */}
                 {relatedTokens.length > 0 && (
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 overflow-hidden">
@@ -2666,7 +2896,7 @@ export default function App() {
                     </div>
                     <div className="p-4 flex flex-wrap gap-2">
                       {relatedTokens.map(token => (
-                        <button 
+                        <button
                           key={token.id}
                           onClick={() => { setActiveWorkspaceId(token.workspaceId); setSelectedAssetId(token.id); }}
                           className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700/50"
@@ -2848,11 +3078,10 @@ export default function App() {
                     <button
                       key={f}
                       onClick={() => setActiveTypeFilter(f)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide whitespace-nowrap transition-colors border ${
-                        activeTypeFilter === f
-                          ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
-                          : 'bg-white/50 dark:bg-slate-800/50 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
-                      }`}
+                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide whitespace-nowrap transition-colors border ${activeTypeFilter === f
+                        ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                        : 'bg-white/50 dark:bg-slate-800/50 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
+                        }`}
                     >
                       {f}
                     </button>
@@ -2997,9 +3226,9 @@ export default function App() {
 
         {/* Context Menu Portal */}
         {contextMenuState.isOpen && (
-          <ContextMenu 
-            x={contextMenuState.x} 
-            y={contextMenuState.y} 
+          <ContextMenu
+            x={contextMenuState.x}
+            y={contextMenuState.y}
             asset={contextMenuState.asset}
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspaceId}
@@ -3007,20 +3236,35 @@ export default function App() {
             onAction={handleContextMenuAction}
           />
         )}
-        
+
         {/* Modals */}
-        <KeyboardShortcutsModal 
-          isOpen={showShortcuts} 
-          onClose={() => setShowShortcuts(false)} 
+        <KeyboardShortcutsModal
+          isOpen={showShortcuts}
+          onClose={() => setShowShortcuts(false)}
         />
         <ImageTracerModal
           isOpen={isImageTracerOpen}
           onClose={() => setIsImageTracerOpen(false)}
           onTraceComplete={handleTraceComplete}
         />
-        <HelpGuide 
-          isOpen={isHelpGuideOpen} 
-          onClose={() => setIsHelpGuideOpen(false)} 
+        <IconSearchModal
+          isOpen={isIconSearchOpen}
+          onClose={() => setIsIconSearchOpen(false)}
+          onSelectIcon={(svgText, name) => {
+            setNewAssetType('svg');
+            setNewAssetValue(svgText);
+            setNewAssetName(name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+            // Optionally auto-submit or just let user verify and submit
+          }}
+        />
+        <HelpGuide
+          isOpen={isHelpGuideOpen}
+          onClose={() => setIsHelpGuideOpen(false)}
+        />
+
+        <AIGeneratorModal
+          isOpen={isAIGeneratorOpen}
+          onClose={() => setIsAIGeneratorOpen(false)}
         />
       </div>
     </AppProvider>
